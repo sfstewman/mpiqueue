@@ -1,3 +1,10 @@
+/* mpiqueue: running small, single-core jobs on a cluster biased against them
+ *
+ * Copyright 2014, Shannon F. Stewman
+ *
+ * Released under the MIT License.  See LICENSE for details.
+ */
+
 #include <stdlib.h>
 #include <stdio.h>
 #include <stdarg.h>
