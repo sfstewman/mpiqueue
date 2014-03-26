@@ -1,4 +1,6 @@
-# mpiqueue: queuing lots of small jobs via MPI #
+# mpiqueue #
+
+## Running small, single-core jobs on a cluster biased against them ##
 
 mpiqueue is a small program designed to help computational scientists
 that run hundreds or thousands of small jobs work efficiently on
