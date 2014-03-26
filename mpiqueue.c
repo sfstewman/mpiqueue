@@ -253,9 +253,10 @@ static int parsefile(const char* desc, tasklist* list)
 
 static tasklist* parsetasks(int ndesc, char** taskdesc)
 {
+  int i;
   tasklist* list = tasklist_new();
 
-  for(int i=0; i < ndesc; i++) {
+  for(i=0; i < ndesc; i++) {
     if (parserange(taskdesc[i],list)) { continue; }
     if (parsefile(taskdesc[i],list))  { continue; }
 
@@ -404,7 +405,7 @@ static void taskinfo_fork_and_exec(const char* log_filename, int taskid)
   }
 
   snprintf(arg, sizeof(arg), "%d", taskid);
-  execlp(script, script, arg, 0);
+  execlp(script, script, arg, NULL);
   /* execlp only returns on an error */
   metalog("ERROR in exec of \"%s\" (%d): %s\n",
       script, errno, strerror(errno));
@@ -496,15 +497,18 @@ static void dispatcher_handle_child(dispatcher* dispatcher)
 }
 
 enum {
-  WAIT_SECS = 0,
-  WAIT_MSECS = 5000,
-  NS_PER_MS = 1000000
+  WAIT_SECS  =       0,
+  WAIT_MSECS =    5000,
+  NS_PER_MS  = 1000000,
 };
 
 /* Sleeps for a while to allow other processes to work */
 static inline void dispatcher_yield(void)
 {
-  struct timespec wait = { .tv_sec = WAIT_SECS, .tv_nsec = WAIT_MSECS*NS_PER_MS };
+  struct timespec wait = {
+    .tv_sec = WAIT_SECS,
+    .tv_nsec = (long long)WAIT_MSECS*NS_PER_MS
+  };
   nanosleep(&wait,NULL);
 }
 
