@@ -50,7 +50,7 @@ Where:
 * `<PREFIX>` is the job log prefix
 * `/path/to/sim` is a path to a command or script that takes the task
   number as a single argument
-* <TASKDESC>...` are one or more task list arguments
+* `<TASKDESC>...` are one or more task list arguments
 
 mpiqueue will then run one process one each requested processor 
 (`NNODES * PROC_PER_NODE` total processors).  One of the processes is
