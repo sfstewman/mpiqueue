@@ -17,6 +17,16 @@
 #include <fcntl.h>
 #include <time.h>
 
+#define VERSION "0.1.0"
+
+#if !defined(VERSION)
+#  define VERSION "unknown"
+#endif /* !defined(VERSION) */
+
+#if !defined(REV_SHA)
+#  define REV_SHA "unknown"
+#endif /* !defined(REV_SHA) */
+
 /* warning!  BSD but not POSIX */
 #include <sys/wait.h>
 
@@ -330,6 +340,9 @@ static void taskinfo_send(int src, int tag, taskinfo* info)
   } else {
     comm_buf[0] = -1;
     comm_buf[1] =  0;
+    if (src != 0) {
+      metalog("MASTER SENDING SHUTDOWN TO RUNNER %d\n", src);
+    }
   }
 
   MPI_Send(comm_buf+0, 2, MPI_INT, src, tag, MPI_COMM_WORLD);
@@ -380,7 +393,11 @@ static void dispatcher_handle_runners(dispatcher* disp)
 
     taskinfo* next = dispatcher_next_task(disp);
     taskinfo_send(info.runner, SHUNT_TAG, next);
-    if (next) { disp->numdispatched++; }
+    if (next) {
+      disp->numdispatched++;
+    } else {
+      metalog("MASTER: %3d runners dispatched\n",disp->numdispatched);
+    }
   }
 }
 
@@ -537,6 +554,8 @@ void master_main(int rank, int size, tasklist* list)
   disp.tasks = list;
 
   metalog("STARTING MASTER on %s\n",hostname);
+  metalog("MPIQUEUE VERSION is %s, revision SHA1 is %s\n",
+      VERSION, REV_SHA);
   metalog("NUMTASKS is %d\n", list->num);
 
   /* broacast GO */
@@ -556,6 +575,8 @@ void master_main(int rank, int size, tasklist* list)
 
     dispatcher_yield();
   }
+
+  metalog("MASTER DONE\n");
 }
 
 void runner_main(int rank, int size)
@@ -637,9 +658,11 @@ void print_announcement(const char* prog,int rank,int size)
       "HOSTNAME %s\n"
       "PREFIX   %s\n"
       "SCRIPT   %s\n", prog, (int)pid, rank, size, hostname, prefix,script);
+  /*
   if (rank == 0) {
     metalog("-------------> MASTER pid is %d\n",(int)pid);
   }
+  */
 
   echo_metalog = saved_echo;
 }
