@@ -73,14 +73,14 @@ Currently, two kinds of task lists are supported: ranges and files.  A
 range task list is given as an inclusive range of two non-negative
 numbers:
 
-    `range:M-N`
+    range:M-N
 
 Here `M` and `N` are non-negative integers.  This will add all tasks
 from `M` to `N`, including `M` and `N`, to the task list.
 
 File tasks is given as a path:
 
-    `file:/path/to/tasklist.txt`
+    file:/path/to/tasklist.txt
     
 mpiqueue parses each line of the file as an integer and adds that
 integer to the task list.  The integer must be non-negative.  The
