@@ -27,16 +27,20 @@ allowing you to queue many small jobs masqueraded as a single large job.
 ## Usage
 
 mpiqueue is invoked from `mpirun`.  The options to give `mpirun` depend
-on the installation and batch queuing system.  Under the 
-[Moab cluster suite][moab-docs], you can use the following template:
+on the installation and batch queuing system.  The template I use is
+based on the [Moab cluster suite][moab-docs]:
 
-		#! /bin/bash
-		#MOAB -l nodes=<NNODES>:ppn=<PROC_PER_NODE>
-		#MOAB -E
-		#MOAB -V
+    #! /bin/bash
+    #MOAB -l nodes=<NNODES>:ppn=<PROC_PER_NODE>
+    #MOAB -j oe
+    #MOAB -E
+    #MOAB -V
 
-		cd <LOG_DIR>
-		/path/to/mpirun /path/to/mpiqueue <PREFIX> /path/to/sim <TASKLIST>...
+    cd <LOG_DIR>
+    /path/to/mpirun             \
+      -np ${PBS_NP}             \
+      -hostfile ${PBS_NODEFILE} \
+      /path/to/mpiqueue <PREFIX> /path/to/sim <TASKLIST>...
 
 Where:
 
@@ -105,17 +109,17 @@ executes a loop:
 requests a first task or reports completion of a task.  In both cases, a
 new task is dispatched to the mpiqueue process.
 
-	* If a task is completed, logs whether it was successful or not.
-	* Dispatch a new task to the process.  If no new task is available,
+* If a task is completed, logs whether it was successful or not.
+* Dispatch a new task to the process.  If no new task is available,
 	  tell the mpiqueue process to shut down.
 
 2. When no messages are available, the queue master checks if it has
 spawned a simulation subprocess.
 
-	* If a subprocess has finished, the queue master logs whether it was
-	  successful or not.
-	* If no subprocess is running, the queue master spawns a subprocess
-	  to run in parallel.
+* If a subprocess has finished, the queue master logs whether it was
+  successful or not.
+* If no subprocess is running, the queue master spawns a subprocess
+  to run in parallel.
 
 3. Sleep for 5000 microseconds.
 
