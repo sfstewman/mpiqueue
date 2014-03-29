@@ -10,12 +10,13 @@ The policies of the cluster I use were written with large multicore jobs
 in mind.  On this cluster, a single user may only have five jobs running
 and a total of ten jobs queued.  This works well for computational jobs
 that use a large number of cores and run for a long time.  Long-running
-molecular dynamics simulations are quite at home in this environment. 
-My work is not.  My work typically involves running a large number of
-short single-core jobs that typically perform stochastic.  Each job can
-run for only a few minutes or hours, but we need a large number of them
-to collect statistics.  Each job is also completely independent, and
-requires no communication with any other job.
+molecular dynamics simulations are quite at home in this environment,
+while the kinds of jobs that I typically run are not.  My work typically
+involves running a large number of stochastic simulations that are short
+and use only a single core.  Each job can run for only a few minutes or
+hours, but we need a large number of them to collect statistics.  Each
+job is also completely independent, and requires no communication with
+any other job.
 
 The simplest way to queue these jobs either individually or as a job
 array.  The queuing system can then schedule and process each job (or
