@@ -45,16 +45,16 @@ typedef struct tasklist tasklist;
 struct tasklist {
   int num;
   int max;
-  taskinfo* tasks;
+  taskinfo *tasks;
 };
 
 typedef struct dispatcher dispatcher;
 struct dispatcher {
-  tasklist* tasks;
+  tasklist *tasks;
   int numdispatched;
   int currtask;
 
-  taskinfo* info;
+  taskinfo *info;
   pid_t child;
 };
 
@@ -74,10 +74,10 @@ enum {
   TASKLIST_HALFINCR = 65536,
 };
 
-static void tasklist_resize_if_at_capacity(tasklist* list)
+static void tasklist_resize_if_at_capacity(tasklist *list)
 {
   int new_max;
-  taskinfo* tmp;
+  taskinfo *tmp;
 
   if (list->num < list->max) { return; }
 
@@ -102,9 +102,9 @@ static void tasklist_resize_if_at_capacity(tasklist* list)
   list->tasks = tmp;
 }
 
-tasklist* tasklist_new(void)
+tasklist *tasklist_new(void)
 {
-  tasklist* list = malloc(sizeof(*list));
+  tasklist *list = malloc(sizeof(*list));
 
   if (list == NULL) {
     everything_die("could not allocate task list\n");
@@ -120,7 +120,7 @@ tasklist* tasklist_new(void)
   return list;
 }
 
-void tasklist_add_task(tasklist* list, int taskid)
+void tasklist_add_task(tasklist *list, int taskid)
 {
   tasklist_resize_if_at_capacity(list);
 
@@ -133,12 +133,12 @@ void tasklist_add_task(tasklist* list, int taskid)
 
 /* some useful globals (NB: should be read-only after initialized) */
 static char hostname[256];
-static const char* prefix;
-static const char* script;
+static const char *prefix;
+static const char *script;
 
 /* output files */
 static int echo_metalog = 1;
-static FILE* _metalog = NULL;
+static FILE *_metalog = NULL;
 
 static void metalog(const char* fmt, ...)
 {
@@ -155,7 +155,7 @@ static void metalog(const char* fmt, ...)
   fflush(_metalog);
 }
 
-static inline const char* parserange_number(const char* spec, int* n)
+static inline const char* parserange_number(const char *spec, int* n)
 {
   if ((*spec < '0') || (*spec > '9')) { return NULL; }
 
@@ -178,9 +178,9 @@ static inline const char* parserange_number(const char* spec, int* n)
 
 #define RANGE_PREFIX "range:"
 #define RANGE_PREFIX_LEN (sizeof(RANGE_PREFIX)-1)
-static int parserange(const char* desc, tasklist* list)
+static int parserange(const char *desc, tasklist *list)
 {
-  const char* spec;
+  const char *spec;
   int i, ind0, ind1;
 
   if (strstr(desc,RANGE_PREFIX)!=desc) { return 0; }
@@ -212,7 +212,7 @@ static int parserange(const char* desc, tasklist* list)
 
 #define FILE_PREFIX "file:"
 #define FILE_PREFIX_LEN (sizeof(FILE_PREFIX)-1)
-static int parsefile(const char* desc, tasklist* list)
+static int parsefile(const char *desc, tasklist *list)
 {
   static char buf[2048];
   const char *path;
@@ -280,7 +280,7 @@ static int parsefile(const char* desc, tasklist* list)
 #undef FILE_PREFIX
 #undef FILE_PREFIX_LEN
 
-static tasklist* parsetasks(int ndesc, char **taskdesc)
+static tasklist *parsetasks(int ndesc, char **taskdesc)
 {
   int i;
   tasklist *list = tasklist_new();
@@ -296,9 +296,9 @@ static tasklist* parsetasks(int ndesc, char **taskdesc)
   return list;
 }
 
-static void taskinfo_report(int rank, taskinfo* info)
+static void taskinfo_report(int rank, taskinfo *info)
 {
-  const char* pfx ="";
+  const char *pfx ="";
   if ((rank == 0) && (info->runner != 0)) { pfx = "MASTER: "; }
 
   if (info->taskid == -1) {
@@ -315,7 +315,7 @@ static void taskinfo_report(int rank, taskinfo* info)
   }
 }
 
-static int taskinfo_is_ready(int tag, int* srcp, int* tagp)
+static int taskinfo_is_ready(int tag, int *srcp, int *tagp)
 {
   MPI_Status status;
   int has_mesg = 0;
@@ -327,7 +327,7 @@ static int taskinfo_is_ready(int tag, int* srcp, int* tagp)
   return has_mesg;
 }
 
-static void taskinfo_receive(int src, int tag, taskinfo* info)
+static void taskinfo_receive(int src, int tag, taskinfo *info)
 {
   int comm_buf[2] = { 0, 0 };
   MPI_Status status;
@@ -340,7 +340,7 @@ static void taskinfo_receive(int src, int tag, taskinfo* info)
   info->errcode = comm_buf[1];
 }
 
-static void taskinfo_send(int src, int tag, taskinfo* info)
+static void taskinfo_send(int src, int tag, taskinfo *info)
 {
   int comm_buf[2];
 
@@ -361,17 +361,17 @@ static void taskinfo_send(int src, int tag, taskinfo* info)
   MPI_Send(comm_buf+0, 2, MPI_INT, src, tag, MPI_COMM_WORLD);
 }
 
-static inline int dispatcher_num_tasks(dispatcher* disp)
+static inline int dispatcher_num_tasks(dispatcher *disp)
 {
   return disp->tasks->num - disp->currtask;
 }
 
-static inline int dispatcher_has_tasks(dispatcher* disp)
+static inline int dispatcher_has_tasks(dispatcher *disp)
 {
   return dispatcher_num_tasks(disp) > 0;
 }
 
-static taskinfo* dispatcher_next_task(dispatcher* disp)
+static taskinfo* dispatcher_next_task(dispatcher *disp)
 {
   if (!dispatcher_has_tasks(disp)) { return NULL; }
 
@@ -389,7 +389,7 @@ static taskinfo* dispatcher_next_task(dispatcher* disp)
  */
 enum { SHUNT_TAG = 1 };
 
-static void dispatcher_handle_runners(dispatcher* disp)
+static void dispatcher_handle_runners(dispatcher *disp)
 {
   int src, tag;
   taskinfo info;
@@ -414,7 +414,7 @@ static void dispatcher_handle_runners(dispatcher* disp)
   }
 }
 
-static void taskinfo_fork_and_exec(const char* log_filename, int taskid)
+static void taskinfo_fork_and_exec(const char *log_filename, int taskid)
 {
   char arg[64];
   FILE* log;
@@ -453,7 +453,7 @@ on_error:
 }
 
 enum { DISPATCH_WAIT = 0, DISPATCH_NOWAIT = 1 };
-static int taskinfo_dispatch(int rank, taskinfo* info, int nowait)
+static int taskinfo_dispatch(int rank, taskinfo *info, int nowait)
 {
   /* open log file */
   int taskid;
@@ -496,7 +496,7 @@ static int taskinfo_dispatch(int rank, taskinfo* info, int nowait)
  *
  * Output: new current task index
  */
-static void dispatcher_handle_child(dispatcher* dispatcher)
+static void dispatcher_handle_child(dispatcher *dispatcher)
 {
   int rank, stat;
 
@@ -559,7 +559,7 @@ void sync_processes(int rank)
   }
 }
 
-void master_main(int rank, int size, tasklist* list)
+void master_main(int rank, int size, tasklist *list)
 {
   dispatcher disp;
 
@@ -621,7 +621,7 @@ done:
   metalog("RUNNER %d DONE\n", rank);
 }
 
-void print_usage_and_exit(const char* prog, int errcode)
+void print_usage_and_exit(const char *prog, int errcode)
 {
   fprintf(stderr, "usage: %s [MPI args] prefix script tasklist...\n",prog);
   fprintf(stderr, "   [MPI args] are any arguments passed to MPI (ignored by %s)\n",prog);
@@ -656,7 +656,7 @@ void open_metalog(int rank)
   }
 }
 
-void print_announcement(const char* prog,int rank,int size)
+void print_announcement(const char *prog,int rank,int size)
 {
   int saved_echo;
   pid_t pid;
@@ -683,7 +683,7 @@ void print_announcement(const char* prog,int rank,int size)
 int main(int argc, char **argv)
 {
   int rank, size; 
-  tasklist* list;
+  tasklist *list;
 
   MPI_Init(&argc, &argv);
 
