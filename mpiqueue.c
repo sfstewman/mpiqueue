@@ -62,7 +62,7 @@ static int everything_die(const char* fmt,...)
 {
   va_list args;
   va_start(args,fmt);
-  fprintf(stderr,fmt,args);
+  vfprintf(stderr,fmt,args);
   va_end(args);
   MPI_Abort(MPI_COMM_WORLD, EXIT_FAILURE);
   return 0;
@@ -215,34 +215,46 @@ static int parserange(const char* desc, tasklist* list)
 static int parsefile(const char* desc, tasklist* list)
 {
   static char buf[2048];
-  const char* path;
+  const char *path;
+  char *beg, *end;
   FILE* f;
   int line;
-  char* end;
-  char* beg;
   long ind;
 
   if (strstr(desc,"file:") != desc) { return 0; }
   path = desc + FILE_PREFIX_LEN;
+
+  metalog("parsing task list from file %s\n", path);
 
   if ((f = fopen(path,"r")) == NULL) {
     everything_die("error opening task file %s: %s\n", path,strerror(errno));
   }
 
   line = 0;
-  while(fgets(buf,sizeof(buf),f)) {
+  while(fgets(buf,sizeof(buf),f) != NULL) {
     line++;
 
     /* remove leading whitespace */
     beg = buf;
     while(isspace(*beg)) { beg++; }
+    if (*beg == '\0') {
+      continue;
+    }
 
     /* remove comments */
     if ((end = strchr(beg,'#'))) {
       *end = '\0';
     }
 
-    if (buf[0] == '\0') { continue; }
+    /* remove trailing whitespace */
+    end = beg + strlen(beg) - 1;
+    while (isspace(*end)) {
+      *end-- = '\0';
+	  }
+
+    if (beg[0] == '\0') { continue; }
+
+    metalog("line %d, parsing: '%s'\n", line,beg);
 
     /* convert to a number */
     end = NULL;
@@ -268,12 +280,13 @@ static int parsefile(const char* desc, tasklist* list)
 #undef FILE_PREFIX
 #undef FILE_PREFIX_LEN
 
-static tasklist* parsetasks(int ndesc, char** taskdesc)
+static tasklist* parsetasks(int ndesc, char **taskdesc)
 {
   int i;
-  tasklist* list = tasklist_new();
+  tasklist *list = tasklist_new();
 
   for(i=0; i < ndesc; i++) {
+    metalog("parsing '%s'\n", taskdesc[i]);
     if (parserange(taskdesc[i],list)) { continue; }
     if (parsefile(taskdesc[i],list))  { continue; }
 
