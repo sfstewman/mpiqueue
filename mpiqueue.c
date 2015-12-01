@@ -45,7 +45,11 @@ typedef struct tasklist tasklist;
 struct tasklist {
   int num;
   int max;
-  taskinfo *tasks;
+
+  int *taskids;
+  // int *runners;
+  // int *errcodes;
+  // taskinfo *tasks;
 };
 
 typedef struct dispatcher dispatcher;
@@ -54,7 +58,8 @@ struct dispatcher {
   int numdispatched;
   int currtask;
 
-  taskinfo *info;
+  int info;
+  // taskinfo *info;
   pid_t child;
 };
 
@@ -74,10 +79,10 @@ enum {
   TASKLIST_HALFINCR = 65536,
 };
 
-static void tasklist_resize_if_at_capacity(tasklist *list)
+static void tasklist_resize_if_at_capacity(tasklist *list, int minsize)
 {
   int new_max;
-  taskinfo *tmp;
+  int *tmp;
 
   if (list->num < list->max) { return; }
 
@@ -93,16 +98,22 @@ static void tasklist_resize_if_at_capacity(tasklist *list)
     new_max = list->max + list->max/4;
   }
 
-  tmp = realloc(list->tasks, new_max*sizeof(list->tasks[0]));
+  if (new_max < minsize) {
+    new_max = minsize;
+  }
+
+  tmp = realloc(list->taskids, 3*new_max*sizeof(list->taskids[0]));
   if (tmp == NULL) {
     everything_die("could not resize task list to %d items\n",new_max);
   }
 
   list->max = new_max;
-  list->tasks = tmp;
+  list->taskids  = tmp;  tmp += new_max;
+  // list->runners  = tmp;  tmp += new_max;
+  // list->errcodes = tmp;
 }
 
-tasklist *tasklist_new(void)
+tasklist *tasklist_new(int minsize)
 {
   tasklist *list = malloc(sizeof(*list));
 
@@ -112,23 +123,20 @@ tasklist *tasklist_new(void)
 
   list->num = 0;
   list->max = 0;
-  list->tasks = NULL;
+  list->taskids = NULL;
+  // list->runners = list->errcodes = NULL;
 
   /* allocate initial elements */
-  tasklist_resize_if_at_capacity(list);
+  tasklist_resize_if_at_capacity(list,minsize);
 
   return list;
 }
 
 void tasklist_add_task(tasklist *list, int taskid)
 {
-  tasklist_resize_if_at_capacity(list);
+  tasklist_resize_if_at_capacity(list, TASKLIST_SIZE0);
 
-  list->tasks[list->num].taskid  = taskid;
-  list->tasks[list->num].runner  = -1;
-  list->tasks[list->num].errcode =  0;
-
-  list->num++;
+  list->taskids[list->num++] = taskid;
 }
 
 /* some useful globals (NB: should be read-only after initialized) */
@@ -280,10 +288,10 @@ static int parsefile(const char *desc, tasklist *list)
 #undef FILE_PREFIX
 #undef FILE_PREFIX_LEN
 
-static tasklist *parsetasks(int ndesc, char **taskdesc)
+static tasklist *parsetasks(int csize, int ndesc, char **taskdesc)
 {
   int i;
-  tasklist *list = tasklist_new();
+  tasklist *list = tasklist_new(csize);
 
   for(i=0; i < ndesc; i++) {
     metalog("parsing '%s'\n", taskdesc[i]);
@@ -292,6 +300,20 @@ static tasklist *parsetasks(int ndesc, char **taskdesc)
 
     everything_die("ERROR: unknown task description: %s\n", taskdesc[i]);
   }
+
+  /* If csize > num tasks, then fill in the remaining items with -1
+   * so the runners will shut down after the scatter
+   */
+  for (i=list->num; i < csize; i++) {
+    list->taskids[i] = -1;
+  }
+
+  /*
+  for (i=0; i < list->num; i++) {
+    list->runners[i] = -1;
+    list->errcodes[i] = 0;
+  }
+  */
 
   return list;
 }
@@ -371,13 +393,9 @@ static inline int dispatcher_has_tasks(dispatcher *disp)
   return dispatcher_num_tasks(disp) > 0;
 }
 
-static taskinfo* dispatcher_next_task(dispatcher *disp)
+static int dispatcher_next_task(dispatcher *disp)
 {
-  if (!dispatcher_has_tasks(disp)) { return NULL; }
-
-  taskinfo* info = disp->tasks->tasks + disp->currtask;
-  disp->currtask++;
-  return info;
+  return dispatcher_has_tasks(disp) ? disp->tasks->taskids[disp->currtask++] : -1;
 }
 
 /* each runner sends a message with two ints:
@@ -392,10 +410,12 @@ enum { SHUNT_TAG = 1 };
 static void dispatcher_handle_runners(dispatcher *disp)
 {
   int src, tag;
-  taskinfo info;
 
   src = tag = 0;
   while (taskinfo_is_ready(SHUNT_TAG, &src, &tag)) {
+    taskinfo info;
+    int next, runner;
+
     metalog("MASTER: message tag=%d from %d\n", tag, src);
 
     memset(&info,0,sizeof(info));
@@ -404,11 +424,17 @@ static void dispatcher_handle_runners(dispatcher *disp)
 
     if (info.taskid != -1) { disp->numdispatched--; }
 
-    taskinfo* next = dispatcher_next_task(disp);
-    taskinfo_send(info.runner, SHUNT_TAG, next);
-    if (next) {
+    runner = info.runner;
+    next = dispatcher_next_task(disp);
+    info.runner  = -1;
+    info.errcode = 0;
+    info.taskid  = next;
+
+    if (next >= 0) {
+      taskinfo_send(runner, SHUNT_TAG, &info);
       disp->numdispatched++;
     } else {
+      taskinfo_send(runner, SHUNT_TAG, NULL);
       metalog("MASTER: %3d runners dispatched\n",disp->numdispatched);
     }
   }
@@ -496,14 +522,17 @@ static int taskinfo_dispatch(int rank, taskinfo *info, int nowait)
  *
  * Output: new current task index
  */
-static void dispatcher_handle_child(dispatcher *dispatcher)
+static void dispatcher_handle_child(dispatcher *dispatcher, int task)
 {
   int rank, stat;
+  taskinfo info;
 
   rank = 0;
 
   /* ... check if we're done ... */
-  if ((dispatcher->child == 0) && !dispatcher_has_tasks(dispatcher)) {
+  if ((task < 0)
+      && (dispatcher->child == 0)
+      && !dispatcher_has_tasks(dispatcher)) {
     return;
   }
 
@@ -514,20 +543,25 @@ static void dispatcher_handle_child(dispatcher *dispatcher)
 
     dispatcher->numdispatched--;
   }
+
   dispatcher->child = 0;
 
   /* otherwise, try to dispatch new child */
-  int taskid = 0;
-  if (!dispatcher_has_tasks(dispatcher)) {
-    metalog("RUNNER %d DONE\n", rank);
-    return;
+  if (task < 0) {
+    if (!dispatcher_has_tasks(dispatcher)) {
+      metalog("RUNNER %d DONE\n", rank);
+      return;
+    }
+
+    dispatcher->info = dispatcher->currtask++;
+    task = dispatcher->tasks->taskids[dispatcher->info];
   }
 
-  dispatcher->info = dispatcher->tasks->tasks+dispatcher->currtask;
-  dispatcher->currtask++;
+  info.taskid = task;
+  info.runner = rank;
+  info.errcode = 0;
 
-  taskid = dispatcher->info->taskid;
-  dispatcher->child = taskinfo_dispatch(rank, dispatcher->info, DISPATCH_NOWAIT);
+  dispatcher->child = taskinfo_dispatch(rank, &info, DISPATCH_NOWAIT);
   if (dispatcher->child < 0) { return; }
 
   dispatcher->numdispatched++;
@@ -549,19 +583,38 @@ static inline void dispatcher_yield(void)
   nanosleep(&wait,NULL);
 }
 
-void sync_processes(int rank)
+int sync_processes(int rank, int size, dispatcher *disp)
 {
-  MPI_Barrier(MPI_COMM_WORLD);
-  if (rank == 0) {
-    metalog("MASTER GO\n");
-  } else {
-    metalog("RUNNER %d GO\n",rank);
+  int first,*buf;
+
+  // MPI_Barrier(MPI_COMM_WORLD);
+
+  first = -1;
+
+  buf = disp ? disp->tasks->taskids : NULL;
+  MPI_Scatter(buf, 1, MPI_INT, &first, 1, MPI_INT, 0, MPI_COMM_WORLD);
+
+  if (disp) {
+    int ntasks = size;
+    if (ntasks > disp->tasks->num) { ntasks = disp->tasks->num; }
+
+    disp->currtask += ntasks;
+    disp->numdispatched = ntasks-1;
   }
+
+  if (rank == 0) {
+    metalog("MASTER GO (first = %d)\n", first);
+  } else {
+    metalog("RUNNER %d GO (first = %d)\n",rank, first);
+  }
+
+  return first;
 }
 
 void master_main(int rank, int size, tasklist *list)
 {
   dispatcher disp;
+  int first;
 
   memset(&disp,0,sizeof(disp));
   disp.tasks = list;
@@ -572,7 +625,7 @@ void master_main(int rank, int size, tasklist *list)
   metalog("NUMTASKS is %d\n", list->num);
 
   /* broacast GO */
-  sync_processes(rank);
+  first = sync_processes(rank, size, &disp);
 
   while(dispatcher_has_tasks(&disp) || (disp.numdispatched > 0)) {
     if (DEBUG_FLAG) {
@@ -584,7 +637,8 @@ void master_main(int rank, int size, tasklist *list)
     dispatcher_handle_runners(&disp);
 
     /* check on (and dispatch) our task */
-    dispatcher_handle_child(&disp);
+    dispatcher_handle_child(&disp,first);
+    first = -1;
 
     dispatcher_yield();
   }
@@ -598,26 +652,27 @@ void runner_main(int rank, int size)
   metalog("STARTING RUNNER %d on %s\n",rank,hostname);
 
   /* wait for GO */
-  sync_processes(rank);
+  memset(&info,0,sizeof(info));
+  info.taskid = sync_processes(rank,size,NULL);
 
-  metalog("RUNNER %d REQUEST TASK\n", rank);
-  taskinfo_send(0, SHUNT_TAG, NULL);
-  for(;;) {
-    memset(&info,0,sizeof(info));
-    taskinfo_receive(MPI_ANY_SOURCE, SHUNT_TAG, &info);
-    if (info.taskid == -1) { goto done; }
-
-    metalog("RUNNER %d RECEIVED TASK %d\n", rank, info.taskid);
-
-    info.runner = rank;
-    taskinfo_dispatch(rank, &info, DISPATCH_WAIT);
-    taskinfo_report(rank, &info);
+  metalog("RUNNER %d FIRST TASK %d\n", rank, info.taskid);
+  for (;;) {
+    if (info.taskid != -1) {
+      info.runner = rank;
+      taskinfo_dispatch(rank, &info, DISPATCH_WAIT);
+      taskinfo_report(rank, &info);
+    }
 
     metalog("RUNNER %d REQUEST TASK\n", rank);
     taskinfo_send(0, SHUNT_TAG, &info);
+
+    memset(&info,0,sizeof(info));
+    taskinfo_receive(MPI_ANY_SOURCE, SHUNT_TAG, &info);
+    metalog("RUNNER %d RECEIVED TASK %d\n", rank, info.taskid);
+
+    if (info.taskid == -1) { break; }
   }
 
-done:
   metalog("RUNNER %d DONE\n", rank);
 }
 
@@ -708,7 +763,7 @@ int main(int argc, char **argv)
   /* invoke main loops */
   if (rank == 0) {
     metalog("parsing task list...\n");
-    list = parsetasks(argc-3, argv+3);
+    list = parsetasks(size,argc-3, argv+3);
     master_main(rank,size,list);
   } else {
     runner_main(rank,size);
