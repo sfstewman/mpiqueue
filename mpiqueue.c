@@ -29,8 +29,9 @@
 
 /* warning!  BSD but not POSIX */
 #include <sys/wait.h>
-
 #include <mpi.h>
+
+int master_runs_jobs = 1;
 
 enum { DEBUG_FLAG = 0 };
 
@@ -627,6 +628,13 @@ void master_main(int rank, int size, tasklist *list)
   /* broacast GO */
   first = sync_processes(rank, size, &disp);
 
+  if (!master_runs_jobs && first >= 0) {
+    metalog("MASTER does not run jobs: job %d pushed onto the queue\n",
+        first);
+    tasklist_add_task(disp.tasks, first);
+    first = -1;
+  }
+
   while(dispatcher_has_tasks(&disp) || (disp.numdispatched > 0)) {
     if (DEBUG_FLAG) {
       fprintf(stderr, "MASTER: %d dispatched, %d tasks, checking for messages\n",
@@ -636,9 +644,11 @@ void master_main(int rank, int size, tasklist *list)
     /* dispatch other runners */
     dispatcher_handle_runners(&disp);
 
-    /* check on (and dispatch) our task */
-    dispatcher_handle_child(&disp,first);
-    first = -1;
+    if (master_runs_jobs) {
+      /* check on (and dispatch) our task */
+      dispatcher_handle_child(&disp,first);
+      first = -1;
+    }
 
     dispatcher_yield();
   }
@@ -737,7 +747,7 @@ void print_announcement(const char *prog,int rank,int size)
 
 int main(int argc, char **argv)
 {
-  int rank, size; 
+  int rank, size, opt; 
   tasklist *list;
 
   MPI_Init(&argc, &argv);
@@ -745,12 +755,23 @@ int main(int argc, char **argv)
   MPI_Comm_rank(MPI_COMM_WORLD, &rank); 
   MPI_Comm_size(MPI_COMM_WORLD, &size);
 
-  if (argc < 4) {
+  optind = 1;
+  while (opt = getopt(argc,argv,"n"), opt != -1) {
+    switch (opt) {
+      case 'n':
+        master_runs_jobs = 0;
+        break;
+      default:
+        print_usage_and_exit(argv[0], EXIT_FAILURE);
+    }
+  }
+
+  if (argc-optind < 3) {
     print_usage_and_exit(argv[0], EXIT_FAILURE);
   }
 
-  prefix = strdup(argv[1]);
-  script = strdup(argv[2]);
+  prefix = strdup(argv[optind+0]);
+  script = strdup(argv[optind+1]);
 
   gethostname(hostname,sizeof(hostname));
 
@@ -763,7 +784,7 @@ int main(int argc, char **argv)
   /* invoke main loops */
   if (rank == 0) {
     metalog("parsing task list...\n");
-    list = parsetasks(size,argc-3, argv+3);
+    list = parsetasks(size,argc-optind-2,argv+optind+2);
     master_main(rank,size,list);
   } else {
     runner_main(rank,size);

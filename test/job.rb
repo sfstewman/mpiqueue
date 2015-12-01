@@ -16,11 +16,20 @@ COUNT=10
 TAU=5.0
 SEED=2048 + 3*taskid
 
-rng = Random.new SEED
+if Object.const_defined? :Random
+  $rng = Random.new SEED
+  def rng
+    $rng.rand
+  end
+else
+  def rng
+    rand
+  end
+end
 
 total = 0.0
 for i in (1..COUNT)
-  secs = -TAU*Math::log(rng.rand)
+  secs = -TAU*Math::log( rng() )
   # secs = -Math::log(rng.rand)
   STDOUT.puts "Waiting #{secs} seconds"
   STDOUT.flush
