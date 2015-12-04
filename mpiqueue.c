@@ -636,9 +636,13 @@ void master_main(int rank, int size, tasklist *list)
   }
 
   while(dispatcher_has_tasks(&disp) || (disp.numdispatched > 0)) {
-    if (DEBUG_FLAG) {
+    static int last_nd = 0, last_ntasks = 0;
+    int ntasks = list->num - disp.currtask;
+    if (DEBUG_FLAG || (last_nd != disp.numdispatched) || (last_ntasks != ntasks)) {
       fprintf(stderr, "MASTER: %d dispatched, %d tasks, checking for messages\n",
           disp.numdispatched, list->num - disp.currtask);
+      last_nd = disp.numdispatched;
+      last_ntasks = ntasks;
     }
 
     /* dispatch other runners */
